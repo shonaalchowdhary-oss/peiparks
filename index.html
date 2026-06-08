@@ -711,6 +711,14 @@ function save(key, val) { localStorage.setItem(key, JSON.stringify(val)); }
 // ══════════════════════════════════════════════════════
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw4cYxiHaeJpHgdzEK-hLL97c7CQc74NHt_SJ9q4yjxdFRjmvpYICmvFzxis0YhYX5FYg/exec';
 
+// ── Format a date string (handles both YYYY-MM-DD and full ISO strings) ──
+function fmtOrderDate(d) {
+  if (!d) return '—';
+  const dt = new Date(d);
+  if (isNaN(dt)) return d;
+  return dt.toLocaleDateString('en-CA', { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
 let deliveries = load('pei_deliveries', []);
 let orders     = load('pei_orders', []);
 let fuelLogs   = load('pei_fuel', []);
@@ -1160,7 +1168,7 @@ function refreshOrders(statusFilter='all') {
   }
   body.innerHTML = filtered.map(o => `
     <tr>
-      <td>${o.date}</td>
+      <td>${fmtOrderDate(o.date)}</td>
       <td><strong>${o.location}</strong></td>
       <td>${o.requester||'—'}</td>
       <td>${o.items.length} item(s)</td>
@@ -1181,7 +1189,7 @@ function viewOrder(id) {
 
   document.getElementById('modal-content').innerHTML = `
     <div class="report-row"><span>Location</span><strong>${o.location}</strong></div>
-    <div class="report-row"><span>Date</span><strong>${o.date}</strong></div>
+    <div class="report-row"><span>Date</span><strong>${fmtOrderDate(o.date)}</strong></div>
     <div class="report-row"><span>Requested By</span><strong>${o.requester||'—'}</strong></div>
     <div class="report-row"><span>Date Needed</span><strong>${o.dateNeeded||'—'}</strong></div>
     <div class="report-row"><span>Priority</span><strong>${o.priority}</strong></div>
@@ -1309,7 +1317,7 @@ function downloadOrderPDF() {
 <h1>Supply Order Request</h1>
 <div class="sub">Printed ${new Date().toLocaleDateString('en-CA', {weekday:'long',year:'numeric',month:'long',day:'numeric'})}</div>
 <div class="row"><span>Location</span><strong>${o.location}</strong></div>
-<div class="row"><span>Order Date</span><strong>${o.date}</strong></div>
+<div class="row"><span>Order Date</span><strong>${fmtOrderDate(o.date)}</strong></div>
 <div class="row"><span>Requested By</span><strong>${o.requester||'—'}</strong></div>
 <div class="row"><span>Date Needed By</span><strong>${o.dateNeeded||'—'}</strong></div>
 <div class="row"><span>Priority</span><strong><span class="badge badge-${o.priority.toLowerCase()}">${o.priority}</span></strong></div>
@@ -1444,7 +1452,7 @@ function refreshDashboard() {
     <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border)">
       <div>
         <div style="font-weight:600;font-size:0.88rem">${o.location}</div>
-        <div style="font-size:0.78rem;color:var(--mid)">${o.date} · ${o.items.length} items</div>
+        <div style="font-size:0.78rem;color:var(--mid)">${fmtOrderDate(o.date)} · ${o.items.length} items</div>
       </div>
       <span class="badge ${o.priority==='Urgent'?'badge-out':'badge-low'}">${o.priority}</span>
     </div>`).join('') || '<p style="color:var(--mid);font-size:0.87rem">No pending orders.</p>';
@@ -1614,7 +1622,7 @@ function generateFridayReport() {
           <tbody>
             ${wkOrders.length ? wkOrders.map(o => `
               <tr>
-                <td>${o.date}</td><td><strong>${o.location}</strong></td>
+                <td>${fmtOrderDate(o.date)}</td><td><strong>${o.location}</strong></td>
                 <td>${o.requester||'—'}</td>
                 <td>${o.items.map(i => `${i.name} (${i.qty})`).join(', ')}</td>
               </tr>`).join('') :
