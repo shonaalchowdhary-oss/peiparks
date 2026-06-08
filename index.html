@@ -585,8 +585,14 @@ tr:hover td { background: var(--mist); }
   <div class="modal">
     <div class="modal-title">Order Details</div>
     <div id="modal-content"></div>
+    <div id="modal-delivery-warning" style="display:none;background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:12px 14px;margin-top:14px;font-size:0.85rem;color:#92400e">
+      ⚠️ <strong>Delivery log required before marking as done.</strong><br>
+      Please log this delivery (with odometer details) in <em>Log Delivery</em> first.
+    </div>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal()">Close</button>
+      <button class="btn btn-secondary" onclick="downloadOrderPDF()" style="background:var(--sky);color:#fff">⬇️ Download PDF</button>
+      <button class="btn btn-amber" id="modal-go-delivery" onclick="goToDeliveryFromModal()" style="display:none">📋 Log Delivery First</button>
       <button class="btn btn-primary" id="modal-mark-done" onclick="markOrderDone()">✓ Mark as Delivered</button>
     </div>
   </div>
@@ -704,7 +710,7 @@ function showPage(name) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('page-'+name).classList.add('active');
-  event.target.classList.add('active');
+  if (event && event.target) event.target.classList.add('active');
   if (name === 'inventory') buildInventory();
   if (name === 'friday') generateFridayReport();
 }
@@ -995,6 +1001,7 @@ function viewOrder(id) {
   const o = orders.find(x => x.id === id);
   if (!o) return;
   currentModalOrderId = id;
+
   document.getElementById('modal-content').innerHTML = `
     <div class="report-row"><span>Location</span><strong>${o.location}</strong></div>
     <div class="report-row"><span>Date</span><strong>${o.date}</strong></div>
@@ -1009,18 +1016,142 @@ function viewOrder(id) {
     </div>
     ${o.notes ? `<div style="margin-top:12px;background:var(--cream);padding:10px;border-radius:6px;font-size:0.85rem"><strong>Notes:</strong> ${o.notes}</div>` : ''}
   `;
-  document.getElementById('modal-mark-done').style.display = o.status === 'Pending' ? 'flex' : 'none';
+
+  const isPending = o.status === 'Pending';
+  // Check if a delivery has been logged for this location today (or after the order date)
+  const hasDelivery = deliveries.some(d =>
+    d.location === o.location && new Date(d.date) >= new Date(o.date)
+  );
+
+  const markDoneBtn = document.getElementById('modal-mark-done');
+  const goDeliveryBtn = document.getElementById('modal-go-delivery');
+  const warning = document.getElementById('modal-delivery-warning');
+
+  if (!isPending) {
+    markDoneBtn.style.display = 'none';
+    goDeliveryBtn.style.display = 'none';
+    warning.style.display = 'none';
+  } else if (hasDelivery) {
+    markDoneBtn.style.display = 'flex';
+    goDeliveryBtn.style.display = 'none';
+    warning.style.display = 'none';
+  } else {
+    markDoneBtn.style.display = 'none';
+    goDeliveryBtn.style.display = 'flex';
+    warning.style.display = 'block';
+  }
+
   document.getElementById('order-modal').classList.add('open');
 }
 function closeModal() { document.getElementById('order-modal').classList.remove('open'); }
+
+function goToDeliveryFromModal() {
+  closeModal();
+  // Navigate to Log Delivery and pre-fill the location if possible
+  const o = orders.find(x => x.id === currentModalOrderId);
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-delivery').classList.add('active');
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  if (o) {
+    document.getElementById('del-location').value = o.location;
+    showToast(`📋 Pre-filled location: ${o.location} — log odometer & items, then return to mark order done.`);
+  }
+}
+
 function markOrderDone() {
   const o = orders.find(x => x.id === currentModalOrderId);
-  if (o) { o.status = 'Delivered'; save('pei_orders', orders); refreshOrders(); refreshDashboard(); }
+  if (!o) return closeModal();
+
+  // Re-check delivery requirement
+  const hasDelivery = deliveries.some(d =>
+    d.location === o.location && new Date(d.date) >= new Date(o.date)
+  );
+  if (!hasDelivery) {
+    document.getElementById('modal-delivery-warning').style.display = 'block';
+    document.getElementById('modal-mark-done').style.display = 'none';
+    document.getElementById('modal-go-delivery').style.display = 'flex';
+    return;
+  }
+
+  o.status = 'Delivered';
+  save('pei_orders', orders);
+  refreshOrders();
+  refreshDashboard();
   closeModal();
+  showToast('✅ Order marked as delivered!');
 }
+
 function quickMarkDone(id) {
   const o = orders.find(x => x.id === id);
-  if (o) { o.status = 'Delivered'; save('pei_orders', orders); refreshOrders(); refreshDashboard(); }
+  if (!o) return;
+  const hasDelivery = deliveries.some(d =>
+    d.location === o.location && new Date(d.date) >= new Date(o.date)
+  );
+  if (!hasDelivery) {
+    // Open the order modal to show the warning
+    viewOrder(id);
+    return;
+  }
+  o.status = 'Delivered';
+  save('pei_orders', orders);
+  refreshOrders();
+  refreshDashboard();
+  showToast('✅ Order marked as delivered!');
+}
+
+// ── Download order as PDF ──
+function downloadOrderPDF() {
+  const o = orders.find(x => x.id === currentModalOrderId);
+  if (!o) return;
+
+  const html = `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"/>
+<title>Order — ${o.location}</title>
+<style>
+  body { font-family: Arial, sans-serif; max-width: 700px; margin: 40px auto; color: #1c1c1c; }
+  h1 { color: #1a3d2b; font-size: 1.6rem; margin-bottom: 4px; }
+  .sub { color: #6b7280; font-size: 0.85rem; margin-bottom: 24px; }
+  .row { display: flex; justify-content: space-between; border-bottom: 1px solid #ddd; padding: 7px 0; font-size: 0.9rem; }
+  .row span { color: #6b7280; }
+  .row strong { color: #1a3d2b; }
+  .items-title { font-weight: 700; margin: 18px 0 8px; font-size: 0.95rem; }
+  ul { padding-left: 18px; }
+  li { margin-bottom: 5px; font-size: 0.9rem; }
+  .badge { display:inline-block; padding: 2px 10px; border-radius: 20px; font-size: 0.78rem; font-weight: 700; }
+  .badge-urgent { background: #fee2e2; color: #991b1b; }
+  .badge-normal { background: #d1fae5; color: #065f46; }
+  .badge-low { background: #dbeafe; color: #1e40af; }
+  .notes { background: #f8f5ef; border-radius: 6px; padding: 10px; margin-top: 14px; font-size: 0.85rem; }
+  .footer { margin-top: 32px; text-align: center; font-size: 0.75rem; color: #aaa; border-top: 1px solid #eee; padding-top: 12px; }
+</style></head><body>
+<h1>🌿 PEI Parks — Supply Order</h1>
+<div class="sub">Printed ${new Date().toLocaleDateString('en-CA', {weekday:'long',year:'numeric',month:'long',day:'numeric'})}</div>
+
+<div class="row"><span>Location</span><strong>${o.location}</strong></div>
+<div class="row"><span>Order Date</span><strong>${o.date}</strong></div>
+<div class="row"><span>Requested By</span><strong>${o.requester||'—'}</strong></div>
+<div class="row"><span>Date Needed By</span><strong>${o.dateNeeded||'—'}</strong></div>
+<div class="row"><span>Priority</span><strong><span class="badge badge-${o.priority.toLowerCase()}">${o.priority}</span></strong></div>
+<div class="row"><span>Status</span><strong>${o.status}</strong></div>
+
+<div class="items-title">Items Requested:</div>
+<ul>
+  ${o.items.map(i => `<li>${i.name} — <strong>${i.qty} ${i.unit}</strong></li>`).join('')}
+</ul>
+
+${o.notes ? `<div class="notes"><strong>Notes:</strong> ${o.notes}</div>` : ''}
+
+<div class="footer">PEI Provincial Parks Supply Distribution System · Order #${o.id}</div>
+</body></html>`;
+
+  const blob = new Blob([html], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `order-${o.location.replace(/\s+/g,'-')}-${o.date}.html`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('📄 Order downloaded — open the file and Print → Save as PDF');
 }
 
 // ═══════════════════════════════════════════════════════
