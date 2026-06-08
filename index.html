@@ -342,7 +342,7 @@ tr:hover td { background: var(--mist); }
       <div class="form-row">
         <div>
           <label>Date</label>
-          <input type="date" id="del-date"/>
+          <input type="date" id="del-date" onchange="refreshDeliveryOdoBanner()"/>
         </div>
         <div>
           <label>Driver Name</label>
@@ -350,25 +350,15 @@ tr:hover td { background: var(--mist); }
         </div>
       </div>
 
-      <div class="section-hdr">🚗 Odometer</div>
-      <div class="form-row">
-        <div>
-          <label>Start (km)</label>
-          <input type="number" id="del-odo-start" placeholder="e.g. 45230" oninput="calcKm()"/>
-        </div>
-        <div>
-          <label>End (km)</label>
-          <input type="number" id="del-odo-end" placeholder="e.g. 45318" oninput="calcKm()"/>
-        </div>
+      <div id="del-odo-banner" style="display:none;background:var(--mist);border:1px solid var(--sage);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:0.85rem;align-items:center;justify-content:space-between">
+        <span>🚗 Today&#39;s odometer: <strong id="del-odo-km-label">—</strong> km driven</span>
+        <button class="btn btn-sm btn-secondary" onclick="showPage(&#39;fuel&#39;)" style="font-size:0.75rem">Edit in Fuel &amp; Vehicle Log →</button>
       </div>
-      <div class="odo-calc">
-        <div>
-          <div style="font-size:0.78rem;color:var(--mid);font-weight:600;letter-spacing:0.05em">KM DRIVEN</div>
-          <div class="km-result" id="km-result">—</div>
-        </div>
+      <div id="del-odo-missing" style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:0.85rem">
+        ⚠️ No odometer logged for today yet. &nbsp;<button class="btn btn-sm btn-secondary" onclick="showPage(&#39;fuel&#39;)" style="font-size:0.75rem">Log in Fuel &amp; Vehicle Log →</button>
       </div>
 
-      <div class="section-hdr" style="margin-top:16px">📎 Receipts / Documents</div>
+      <div class="section-hdr">📎 Receipts / Documents</div>
       <div class="upload-zone" onclick="document.getElementById('receipt-input').click()">
         <input type="file" id="receipt-input" multiple accept=".pdf,.jpg,.jpeg,.png" onchange="handleReceipts(this)"/>
         <div class="upload-icon">📄</div>
@@ -496,7 +486,58 @@ tr:hover td { background: var(--mist); }
 ═══════════════════════════════════════════════════ -->
 <div class="page" id="page-fuel">
   <div class="page-title">Fuel & Vehicle Log</div>
-  <div class="page-sub">Track every fuel stop and odometer reading</div>
+  <div class="page-sub">Log today's odometer once, then record fuel stops below</div>
+
+  <!-- Daily Odometer Card -->
+  <div class="card" style="margin-bottom:20px">
+    <div class="card-title">🚗 Daily Odometer</div>
+    <div class="alert alert-info" style="margin-bottom:16px">📋 Enter start and end odometer for the whole day — once per day. This km total applies to all deliveries logged that day.</div>
+    <div class="form-row-3">
+      <div>
+        <label>Date</label>
+        <input type="date" id="odo-date"/>
+      </div>
+      <div>
+        <label>Driver</label>
+        <input type="text" id="odo-driver" placeholder="Your name"/>
+      </div>
+      <div>
+        <label>Vehicle / Plate #</label>
+        <input type="text" id="odo-vehicle" placeholder="e.g. ABC 123"/>
+      </div>
+    </div>
+    <div class="form-row">
+      <div>
+        <label>Odometer Start (km)</label>
+        <input type="number" id="odo-start" placeholder="e.g. 45230" oninput="calcDailyKm()"/>
+      </div>
+      <div>
+        <label>Odometer End (km)</label>
+        <input type="number" id="odo-end" placeholder="e.g. 45450" oninput="calcDailyKm()"/>
+      </div>
+    </div>
+    <div class="odo-calc" style="margin-bottom:16px">
+      <div>
+        <div style="font-size:0.78rem;color:var(--mid);font-weight:600;letter-spacing:0.05em">KM DRIVEN TODAY</div>
+        <div class="km-result" id="daily-km-result">—</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <button class="btn btn-primary" onclick="saveDailyOdo()">💾 Save Daily Odometer</button>
+      <span id="odo-save-status" style="font-size:0.82rem;color:var(--fern)"></span>
+    </div>
+    <div style="margin-top:20px">
+      <div style="font-size:0.82rem;font-weight:600;color:var(--forest);margin-bottom:8px;letter-spacing:0.03em">RECENT ENTRIES</div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Date</th><th>Driver</th><th>Vehicle</th><th>Odo Start</th><th>Odo End</th><th>KM</th><th></th></tr></thead>
+          <tbody id="daily-odo-body">
+            <tr><td colspan="7" style="text-align:center;color:var(--mid);padding:16px">No entries yet.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
 
   <div class="grid-2" style="align-items:start">
     <div class="card">
@@ -665,15 +706,51 @@ const SUPPLIES = [
 function load(key, def) { try { return JSON.parse(localStorage.getItem(key)) || def; } catch { return def; } }
 function save(key, val) { localStorage.setItem(key, JSON.stringify(val)); }
 
+// ══════════════════════════════════════════════════════
+// GOOGLE SHEETS CONFIG — paste your Apps Script URL here
+// ══════════════════════════════════════════════════════
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw4cYxiHaeJpHgdzEK-hLL97c7CQc74NHt_SJ9q4yjxdFRjmvpYICmvFzxis0YhYX5FYg/exec';
+
 let deliveries = load('pei_deliveries', []);
 let orders     = load('pei_orders', []);
 let fuelLogs   = load('pei_fuel', []);
 let inventory  = load('pei_inventory', {});
+let dailyOdos  = load('pei_daily_odo', []);
 let receipts   = {};   // session only (files can't be serialized easily)
 let fuelReceiptFiles = {};
 
+// ── Fetch orders from Google Sheets ──
+async function fetchOrdersFromSheets() {
+  if (!SCRIPT_URL || SCRIPT_URL === 'https://script.google.com/macros/s/AKfycbw4cYxiHaeJpHgdzEK-hLL97c7CQc74NHt_SJ9q4yjxdFRjmvpYICmvFzxis0YhYX5FYg/exec') return;
+  try {
+    const res = await fetch(SCRIPT_URL + '?action=getOrders');
+    const data = await res.json();
+    if (data.orders) {
+      orders = data.orders;
+      save('pei_orders', orders); // keep local cache in sync
+    }
+  } catch(e) {
+    console.warn('Could not fetch orders from Sheets, using local cache:', e);
+  }
+}
+
+// ── Push a status update back to Sheets ──
+async function updateOrderStatusInSheets(orderId, status) {
+  if (!SCRIPT_URL || SCRIPT_URL === 'https://script.google.com/macros/s/AKfycbw4cYxiHaeJpHgdzEK-hLL97c7CQc74NHt_SJ9q4yjxdFRjmvpYICmvFzxis0YhYX5FYg/exec') return;
+  try {
+    await fetch(SCRIPT_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'updateOrderStatus', id: orderId, status })
+    });
+  } catch(e) {
+    console.warn('Could not sync status to Sheets:', e);
+  }
+}
+
 // ── Init ──
-function init() {
+async function init() {
   document.getElementById('dash-date').textContent =
     new Date().toLocaleDateString('en-CA', {weekday:'long',year:'numeric',month:'long',day:'numeric'});
 
@@ -698,9 +775,26 @@ function init() {
   buildSupplyChecklist();
   buildOrderChecklist();
   buildInventory();
+
+  // Set odo-date to today
+  const odoDateEl = document.getElementById('odo-date');
+  if (odoDateEl) odoDateEl.value = today;
+
+  // Fetch orders from Google Sheets, then render
+  await fetchOrdersFromSheets();
+
   refreshDashboard();
   refreshOrders();
   refreshFuelLog();
+  refreshDailyOdo();
+  refreshDeliveryOdoBanner();
+
+  // Auto-refresh orders every 60 seconds
+  setInterval(async () => {
+    await fetchOrdersFromSheets();
+    refreshDashboard();
+    refreshOrders();
+  }, 60000);
 }
 
 // ═══════════════════════════════════════════════════════
@@ -713,6 +807,8 @@ function showPage(name) {
   if (event && event.target) event.target.classList.add('active');
   if (name === 'inventory') buildInventory();
   if (name === 'friday') generateFridayReport();
+  if (name === 'delivery') refreshDeliveryOdoBanner();
+  if (name === 'fuel') { refreshDailyOdo(); }
 }
 function switchTab(page, tab) {
   document.querySelectorAll(`#page-${page} .tab`).forEach(t => t.classList.remove('active'));
@@ -809,15 +905,91 @@ function removeChip(containerId, name) {
 // ═══════════════════════════════════════════════════════
 // ODO CALC
 // ═══════════════════════════════════════════════════════
-function calcKm() {
-  const s = +document.getElementById('del-odo-start').value;
-  const e = +document.getElementById('del-odo-end').value;
-  document.getElementById('km-result').textContent = (s && e && e > s) ? (e - s) + ' km' : '—';
-}
 function calcFuelKm() {
   const s = +document.getElementById('fuel-odo-start').value;
   const e = +document.getElementById('fuel-odo-end').value;
   document.getElementById('fuel-km').value = (s && e && e > s) ? e - s : '';
+}
+
+// ── Daily Odometer ──────────────────────────────────────
+function calcDailyKm() {
+  const s = +document.getElementById('odo-start').value;
+  const e = +document.getElementById('odo-end').value;
+  document.getElementById('daily-km-result').textContent = (s && e && e > s) ? (e - s) + ' km' : '—';
+}
+
+function saveDailyOdo() {
+  const date = document.getElementById('odo-date').value;
+  if (!date) return showToast('⚠️ Please select a date.');
+  const odoStart = +document.getElementById('odo-start').value || 0;
+  const odoEnd   = +document.getElementById('odo-end').value || 0;
+  if (!odoStart || !odoEnd) return showToast('⚠️ Please enter both start and end odometer readings.');
+  if (odoEnd <= odoStart) return showToast('⚠️ End odometer must be greater than start.');
+
+  const entry = {
+    id: Date.now(),
+    date,
+    driver: document.getElementById('odo-driver').value.trim(),
+    vehicle: document.getElementById('odo-vehicle').value.trim(),
+    odoStart,
+    odoEnd,
+    km: odoEnd - odoStart
+  };
+
+  // Replace any existing entry for the same date
+  dailyOdos = dailyOdos.filter(o => o.date !== date);
+  dailyOdos.unshift(entry);
+  save('pei_daily_odo', dailyOdos);
+
+  refreshDailyOdo();
+  refreshDeliveryOdoBanner();
+  document.getElementById('odo-save-status').textContent = '✓ Saved!';
+  setTimeout(() => { document.getElementById('odo-save-status').textContent = ''; }, 2500);
+  showToast('✅ Daily odometer saved!');
+}
+
+function deleteDailyOdo(id) {
+  dailyOdos = dailyOdos.filter(o => o.id !== id);
+  save('pei_daily_odo', dailyOdos);
+  refreshDailyOdo();
+  refreshDeliveryOdoBanner();
+  showToast('🗑️ Entry deleted.');
+}
+
+function refreshDailyOdo() {
+  dailyOdos = load('pei_daily_odo', []);
+  const body = document.getElementById('daily-odo-body');
+  if (!dailyOdos.length) {
+    body.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--mid);padding:16px">No entries yet.</td></tr>';
+    return;
+  }
+  body.innerHTML = dailyOdos.slice(0, 14).map(o => `
+    <tr>
+      <td>${o.date}</td>
+      <td>${o.driver || '—'}</td>
+      <td>${o.vehicle || '—'}</td>
+      <td>${o.odoStart.toLocaleString()} km</td>
+      <td>${o.odoEnd.toLocaleString()} km</td>
+      <td><strong>${o.km} km</strong></td>
+      <td><button class="btn btn-sm btn-danger" onclick="deleteDailyOdo(${o.id})">✕</button></td>
+    </tr>`).join('');
+}
+
+function refreshDeliveryOdoBanner() {
+  dailyOdos = load('pei_daily_odo', []);
+  const today = document.getElementById('del-date') ? document.getElementById('del-date').value : new Date().toISOString().split('T')[0];
+  const entry = dailyOdos.find(o => o.date === today);
+  const banner  = document.getElementById('del-odo-banner');
+  const missing = document.getElementById('del-odo-missing');
+  if (!banner || !missing) return;
+  if (entry) {
+    banner.style.display = 'flex';
+    missing.style.display = 'none';
+    document.getElementById('del-odo-km-label').textContent = entry.km;
+  } else {
+    banner.style.display = 'none';
+    missing.style.display = 'block';
+  }
 }
 
 // ═══════════════════════════════════════════════════════
@@ -836,14 +1008,21 @@ function saveDelivery() {
   }));
   if (!items.length) return alert('Select at least one supply item.');
 
+  const delDate = document.getElementById('del-date').value;
+  // Pull km from the daily odometer for this date
+  const todayOdo = dailyOdos.find(o => o.date === delDate);
+  const km = todayOdo ? todayOdo.km : 0;
+  const odoStart = todayOdo ? todayOdo.odoStart : 0;
+  const odoEnd = todayOdo ? todayOdo.odoEnd : 0;
+
   const d = {
     id: Date.now(),
-    date: document.getElementById('del-date').value,
+    date: delDate,
     location: loc,
     driver: document.getElementById('del-driver').value,
-    odoStart: +document.getElementById('del-odo-start').value || 0,
-    odoEnd: +document.getElementById('del-odo-end').value || 0,
-    km: (+document.getElementById('del-odo-end').value - +document.getElementById('del-odo-start').value) || 0,
+    odoStart,
+    odoEnd,
+    km,
     items,
     notes: document.getElementById('del-notes').value,
     receipts: Object.keys(receipts),
@@ -865,9 +1044,6 @@ function saveDelivery() {
 function clearDelivery() {
   document.getElementById('del-location').value = '';
   document.getElementById('del-driver').value = '';
-  document.getElementById('del-odo-start').value = '';
-  document.getElementById('del-odo-end').value = '';
-  document.getElementById('km-result').textContent = '—';
   document.getElementById('del-notes').value = '';
   document.getElementById('receipt-list').innerHTML = '';
   receipts = {};
@@ -1076,6 +1252,7 @@ function markOrderDone() {
 
   o.status = 'Delivered';
   save('pei_orders', orders);
+  updateOrderStatusInSheets(o.id, 'Delivered');
   refreshOrders();
   refreshDashboard();
   closeModal();
@@ -1095,6 +1272,7 @@ function quickMarkDone(id) {
   }
   o.status = 'Delivered';
   save('pei_orders', orders);
+  updateOrderStatusInSheets(o.id, 'Delivered');
   refreshOrders();
   refreshDashboard();
   showToast('✅ Order marked as delivered!');
@@ -1301,7 +1479,11 @@ function generateFridayReport() {
     return d >= weekStart && o.status === 'Delivered';
   });
 
-  const totalKm   = wkDels.reduce((s, d) => s + d.km, 0);
+  // Use daily odometer entries for accurate km total
+  const wkOdos = dailyOdos.filter(o => new Date(o.date) >= weekStart);
+  const totalKm = wkOdos.length > 0
+    ? wkOdos.reduce((s, o) => s + o.km, 0)
+    : wkDels.reduce((s, d) => s + d.km, 0); // fallback to delivery km if no daily odo
   const totalL    = wkFuel.reduce((s, f) => s + f.litres, 0);
   const totalCost = wkFuel.reduce((s, f) => s + f.cost, 0);
   const allDrivers = [...new Set([...wkDels.map(d=>d.driver), ...wkFuel.map(f=>f.driver)].filter(Boolean))];
@@ -1378,12 +1560,36 @@ function generateFridayReport() {
       </div>
     </div>
 
+    <!-- Daily Odometer -->
+    <div class="report-block">
+      <div class="report-block-hdr">🚗 DAILY ODOMETER LOG</div>
+      <div class="report-block-body" style="padding:0">
+        <table>
+          <thead><tr><th>Date</th><th>Driver</th><th>Vehicle</th><th>Odo Start</th><th>Odo End</th><th>KM Driven</th></tr></thead>
+          <tbody>
+            ${wkOdos.length ? wkOdos.map(o => `
+              <tr>
+                <td>${o.date}</td><td>${o.driver||'—'}</td><td>${o.vehicle||'—'}</td>
+                <td>${o.odoStart.toLocaleString()} km</td>
+                <td>${o.odoEnd.toLocaleString()} km</td>
+                <td><strong>${o.km} km</strong></td>
+              </tr>`).join('') :
+              '<tr><td colspan="6" style="text-align:center;color:var(--mid);padding:16px">No daily odometer entries this week.</td></tr>'}
+            <tr style="background:var(--mist);font-weight:700">
+              <td colspan="5"><strong>TOTAL KM THIS WEEK</strong></td>
+              <td><strong>${totalKm} km</strong></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
     <!-- Deliveries -->
     <div class="report-block">
       <div class="report-block-hdr">📦 DELIVERIES THIS WEEK</div>
       <div class="report-block-body" style="padding:0">
         <table>
-          <thead><tr><th>Date</th><th>Location</th><th>Driver</th><th>Items Delivered</th><th>Qty Total</th><th>KM</th></tr></thead>
+          <thead><tr><th>Date</th><th>Location</th><th>Driver</th><th>Items Delivered</th><th>Qty Total</th></tr></thead>
           <tbody>
             ${wkDels.length ? wkDels.map(d => `
               <tr>
@@ -1392,7 +1598,6 @@ function generateFridayReport() {
                 <td>${d.driver||'—'}</td>
                 <td>${d.items.map(i => i.name).join(', ')}</td>
                 <td>${d.items.reduce((s,i) => s + i.qty, 0)}</td>
-                <td>${d.km > 0 ? d.km + ' km' : '—'}</td>
               </tr>`).join('') :
               '<tr><td colspan="6" style="text-align:center;color:var(--mid);padding:16px">No deliveries logged this week.</td></tr>'}
           </tbody>

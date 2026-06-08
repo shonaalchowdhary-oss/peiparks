@@ -419,11 +419,14 @@ const SUPPLIES = [
   { cat:"EXTRA",    name:"Masking Tape",               desc:"",                              unit:"roll" },
 ];
 
-// ── Shared localStorage keys (same as index.html) ──
-function load(key, def) { try { return JSON.parse(localStorage.getItem(key)) || def; } catch { return def; } }
-function save(key, val) { localStorage.setItem(key, JSON.stringify(val)); }
+// ══════════════════════════════════════════════════════
+// GOOGLE SHEETS CONFIG — paste your Apps Script URL here
+// ══════════════════════════════════════════════════════
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw4cYxiHaeJpHgdzEK-hLL97c7CQc74NHt_SJ9q4yjxdFRjmvpYICmvFzxis0YhYX5FYg/exec';
 
 // ── My orders: tracked locally by session key ──
+function load(key, def) { try { return JSON.parse(localStorage.getItem(key)) || def; } catch { return def; } }
+function save(key, val) { localStorage.setItem(key, JSON.stringify(val)); }
 function loadMyOrderIds() { return load('pei_my_order_ids', []); }
 function saveMyOrderId(id) {
   const ids = loadMyOrderIds();
@@ -486,7 +489,7 @@ function switchTab(tab) {
 }
 
 // ── Submit ──
-function submitOrder() {
+async function submitOrder() {
   const loc = document.getElementById('ord-location').value;
   if (!loc) return showToast('⚠️ Please select your location.');
 
@@ -515,10 +518,31 @@ function submitOrder() {
     status: 'Pending'
   };
 
-  // Save to shared orders (driver sees this)
-  const orders = load('pei_orders', []);
-  orders.unshift(order);
-  save('pei_orders', orders);
+  // Show a loading state
+  const submitBtn = document.querySelector('button[onclick="submitOrder()"]');
+  submitBtn.disabled = true;
+  submitBtn.textContent = '⏳ Submitting…';
+
+  try {
+    if (!SCRIPT_URL || SCRIPT_URL === 'https://script.google.com/macros/s/AKfycbw4cYxiHaeJpHgdzEK-hLL97c7CQc74NHt_SJ9q4yjxdFRjmvpYICmvFzxis0YhYX5FYg/exec') {
+      throw new Error('SCRIPT_URL not configured');
+    }
+    await fetch(SCRIPT_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'addOrder', order })
+    });
+  } catch (e) {
+    console.warn('Google Sheets sync failed, saving locally:', e);
+    // Fallback: save to localStorage so data isn't lost
+    const orders = load('pei_orders', []);
+    orders.unshift(order);
+    save('pei_orders', orders);
+  }
+
+  submitBtn.disabled = false;
+  submitBtn.textContent = '📤 Submit Order Request';
 
   // Track this order id locally so "My Orders" can show it
   saveMyOrderId(order.id);
@@ -542,11 +566,31 @@ function newOrder() {
 }
 
 // ── My Orders history ──
-function renderHistory() {
+async function renderHistory() {
   const myIds = loadMyOrderIds();
-  const allOrders = load('pei_orders', []);
-  const mine = allOrders.filter(o => myIds.includes(o.id));
   const el = document.getElementById('history-list');
+
+  if (!myIds.length) {
+    el.innerHTML = '<p style="color:var(--mid);font-size:0.9rem;padding:12px 0">No orders placed from this device yet.</p>';
+    return;
+  }
+
+  el.innerHTML = '<p style="color:var(--mid);font-size:0.9rem;padding:12px 0">Loading…</p>';
+
+  let allOrders = [];
+  try {
+    if (SCRIPT_URL && SCRIPT_URL !== 'https://script.google.com/macros/s/AKfycbw4cYxiHaeJpHgdzEK-hLL97c7CQc74NHt_SJ9q4yjxdFRjmvpYICmvFzxis0YhYX5FYg/exec') {
+      const res = await fetch(SCRIPT_URL + '?action=getOrders');
+      const data = await res.json();
+      allOrders = data.orders || [];
+    } else {
+      allOrders = load('pei_orders', []);
+    }
+  } catch(e) {
+    allOrders = load('pei_orders', []);
+  }
+
+  const mine = allOrders.filter(o => myIds.includes(o.id));
 
   if (!mine.length) {
     el.innerHTML = '<p style="color:var(--mid);font-size:0.9rem;padding:12px 0">No orders placed from this device yet.</p>';
