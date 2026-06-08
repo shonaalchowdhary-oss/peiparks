@@ -579,7 +579,7 @@ async function renderHistory() {
 
   let allOrders = [];
   try {
-    if (SCRIPT_URL && SCRIPT_URL !== 'https://script.google.com/macros/s/AKfycbw4cYxiHaeJpHgdzEK-hLL97c7CQc74NHt_SJ9q4yjxdFRjmvpYICmvFzxis0YhYX5FYg/exec') {
+    if (SCRIPT_URL && SCRIPT_URL !== 'YOUR_APPS_SCRIPT_URL_HERE') {
       const res = await fetch(SCRIPT_URL + '?action=getOrders');
       const data = await res.json();
       allOrders = data.orders || [];

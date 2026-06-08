@@ -721,7 +721,7 @@ let fuelReceiptFiles = {};
 
 // ── Fetch orders from Google Sheets ──
 async function fetchOrdersFromSheets() {
-  if (!SCRIPT_URL || SCRIPT_URL === 'https://script.google.com/macros/s/AKfycbw4cYxiHaeJpHgdzEK-hLL97c7CQc74NHt_SJ9q4yjxdFRjmvpYICmvFzxis0YhYX5FYg/exec') return;
+  if (!SCRIPT_URL || SCRIPT_URL === 'YOUR_APPS_SCRIPT_URL_HERE') return;
   try {
     const res = await fetch(SCRIPT_URL + '?action=getOrders');
     const data = await res.json();
@@ -736,7 +736,7 @@ async function fetchOrdersFromSheets() {
 
 // ── Push a status update back to Sheets ──
 async function updateOrderStatusInSheets(orderId, status) {
-  if (!SCRIPT_URL || SCRIPT_URL === 'https://script.google.com/macros/s/AKfycbw4cYxiHaeJpHgdzEK-hLL97c7CQc74NHt_SJ9q4yjxdFRjmvpYICmvFzxis0YhYX5FYg/exec') return;
+  if (!SCRIPT_URL || SCRIPT_URL === 'YOUR_APPS_SCRIPT_URL_HERE') return;
   try {
     await fetch(SCRIPT_URL, {
       method: 'POST',
